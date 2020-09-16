@@ -124,6 +124,8 @@ if __name__ == '__main__':
     
     # step_4 : fit the pre-processor
     print("imp : shape of data before pp: ", concat_data.shape)
+    print("sample data : \n", concat_data.head(1).values)
+    
     preprocessor.fit(concat_data)
     
     features = preprocessor.transform(concat_data)
@@ -174,7 +176,7 @@ def input_fn(input_data, content_type):
         raise ValueError("{} not supported by script!".format(content_type))
         
 
-def output_fn(prediction, accept):
+def deprm_output_fn(prediction, accept):
     """Format prediction output
     
     The default accept/content-type between containers for serial inference is JSON.
