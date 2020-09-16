@@ -30,16 +30,41 @@ if __name__ =='__main__':
     parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR'))
     parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAIN'))
     parser.add_argument('--test', type=str, default=os.environ.get('SM_CHANNEL_TEST'))
-    parser.add_argument('--train-file', type=str, default='boston_train.csv')
-    parser.add_argument('--test-file', type=str, default='boston_test.csv')
+    #parser.add_argument('--train-file', type=str, default='boston_train.csv')
+    #parser.add_argument('--test-file', type=str, default='boston_test.csv')
     parser.add_argument('--features', type=str)  # in this script we ask user to explicitly name features
     parser.add_argument('--target', type=str) # in this script we ask user to explicitly name the target
 
     args, _ = parser.parse_known_args()
-
-    print('reading data')
-    train_df = pd.read_csv(os.path.join(args.train, args.train_file))
-    test_df = pd.read_csv(os.path.join(args.test, args.test_file))
+    
+    print("args.train", args.train)
+    print("args.test", args.test)
+    
+    print('reading train data')
+    print("args.train : ",args.train)
+    # Take the set of files and read them all into a single pandas dataframe
+    input_files = [ os.path.join(args.train, file) for file in os.listdir(args.train) ]
+    if len(input_files) == 0:
+        raise ValueError(('There are no files in {}.\n' +
+                          'This usually indicates that the channel ({}) was incorrectly specified,\n' +
+                          'the data specification in S3 was incorrectly specified or the role specified\n' +
+                          'does not have permission to access the data.').format(args.train, "train"))
+    raw_data = [ pd.read_csv(file, header=None, engine="python") for file in input_files ]
+    train_df = pd.concat(raw_data)
+    print(train_df.shape)
+    
+    print('reading test data')
+    print("args.test : ",args.test)
+    # Take the set of files and read them all into a single pandas dataframe
+    input_files = [ os.path.join(args.test, file) for file in os.listdir(args.test) ]
+    if len(input_files) == 0:
+        raise ValueError(('There are no files in {}.\n' +
+                          'This usually indicates that the channel ({}) was incorrectly specified,\n' +
+                          'the data specification in S3 was incorrectly specified or the role specified\n' +
+                          'does not have permission to access the data.').format(args.train, "train"))
+    raw_data = [ pd.read_csv(file, header=None, engine="python") for file in input_files ]
+    test_df = pd.concat(raw_data)
+    print(test_df.shape)
 
     print('building training and testing datasets')
     """
@@ -49,10 +74,12 @@ if __name__ =='__main__':
     y_test = test_df[args.target]
     """
     print(train_df.columns.values)
-    X_train = train_df.drop(columns=['0'])
-    X_test = test_df.drop(columns=['0'])
-    y_train = train_df['0']
-    y_test = test_df['0']
+    col_to_predict = train_df.columns.values[0]
+    print("col_to_predict : {}, arg_type : {}".format(col_to_predict, type(col_to_predict)))
+    X_train = train_df.drop(columns=[col_to_predict])
+    X_test = test_df.drop(columns=[col_to_predict])
+    y_train = train_df[col_to_predict]
+    y_test = test_df[col_to_predict]
     
     
     # train
@@ -62,6 +89,10 @@ if __name__ =='__main__':
         min_samples_leaf=args.min_samples_leaf,
         n_jobs=-1)
     
+    print("-"*100)
+    print("X_train.shape : ", X_train.shape)
+    print("model training on num features : ", X_train.shape[1])
+    print("sample data : \n", X_train.head(1).values)
     model.fit(X_train, y_train)
 
     # print abs error

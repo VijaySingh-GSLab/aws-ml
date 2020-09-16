@@ -91,6 +91,8 @@ if __name__ == '__main__':
 
     # Labels should not be preprocessed. predict_fn will reinsert the labels after featurizing.
     concat_data.drop(label_column, axis=1, inplace=True)
+    print("{}_training_the_transformModel_{}".format("="*40, "="*40))
+    print("data shape : ", concat_data.shape)
     
     # step_3 : pre-processor
     # This section is adapted from the scikit-learn example of using preprocessing pipelines:
@@ -121,7 +123,12 @@ if __name__ == '__main__':
             ("cat", categorical_transformer, make_column_selector(dtype_include="category"))])
     
     # step_4 : fit the pre-processor
+    print("imp : shape of data before pp: ", concat_data.shape)
     preprocessor.fit(concat_data)
+    
+    features = preprocessor.transform(concat_data)
+    print("imp : shape of data after pp: ", features.shape)
+    print("sample data : \n", features[0])
     
     # step_5 : persist the model
     joblib.dump(preprocessor, os.path.join(args.model_dir, "model.joblib"))
@@ -145,6 +152,7 @@ def input_fn(input_data, content_type):
     and unlabelled data we first determine whether the label column is present
     by looking at how many columns were provided.
     """
+    print("{} input_fn {}".format("="*40, "="*40))
     if content_type == 'text/csv':
         # Read the raw input data as CSV.
         df = pd.read_csv(StringIO(input_data), 
@@ -152,9 +160,13 @@ def input_fn(input_data, content_type):
         
         if len(df.columns) == len(feature_columns_names) + 1:
             # This is a labelled example, includes the ring label
+            print("This is a labelled example, includes the col_to_predict")
+            print("df.shape : ", df.shape)
             df.columns = feature_columns_names + [label_column]
         elif len(df.columns) == len(feature_columns_names):
             # This is an unlabelled example.
+            print("This is an unlabelled example.")
+            print("df.shape : ", df.shape)
             df.columns = feature_columns_names
             
         return df
@@ -169,6 +181,8 @@ def output_fn(prediction, accept):
     We also want to set the ContentType or mimetype as the same value as accept so the next
     container can read the response payload correctly.
     """
+    print("{} output_fn {}".format("="*40, "="*40))
+    
     if accept == "application/json":
         instances = []
         for row in prediction.tolist():
@@ -185,6 +199,8 @@ def output_fn(prediction, accept):
 
 def predict_fn(input_data, model):
     """
+    imppp : input_data : comming from input_fn
+    
     std func to execute preprocessor.transform(), fit() funcs.
     
     Preprocess input data
@@ -201,17 +217,30 @@ def predict_fn(input_data, model):
     
         rest of features either one hot encoded or standardized
     """
+    print("{} predict_fn {}".format("="*40, "="*40))
+    
     # it anyhow filter out the label_column columns (as per the script)
+    print("imp : raw data shape : ".format(input_data.shape))
     features = model.transform(input_data)
-
+    
     if label_column in input_data:
+        # this section used for training (NOT pred/pipeline)
+        features = np.insert(features, 0, input_data[label_column], axis=1)
+        print("training job")
+        print("imp : pp feature data shape : {}".format(features.shape))
+        print("sample data : \n", features[0])
         # if it is traning job
         # Return the label (as the first column) and the set of features.
-        return np.insert(features, 0, input_data[label_column], axis=1)
+        return features
     else:
+        # this section used for pred/pipeline (Imp), here pass the input data without col_to_predict
+        print("test/pred job")
+        print("imp : pp feature data shape : {}".format(features.shape))
+        print("sample data : \n", features[0])
         # if it is test/pred job
         # Return only the set of features
         return features
+    
     
 
 def model_fn(model_dir):
