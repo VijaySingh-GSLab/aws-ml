@@ -1,3 +1,24 @@
+import argparse
+import joblib
+import os
+
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.metrics import classification_report
+from sklearn.metrics import accuracy_score, precision_score, recall_score 
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import average_precision_score
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
+
+#from sklearn.metrics import PrecisionRecallDisplay
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
 CUSTOM_STOP_WORDS = ['a', 'about', 'above', 'across', 'after', 'afterwards', 'again', 'against', 'ain', 'all', 'almost',
                   'alone', 'along', 'already', 'also', 'although', 'always', 'am', 'among', 'amongst', 'amount', 'an',
                   'and', 'another', 'any', 'anyhow', 'anyone', 'anything', 'anyway', 'anywhere', 'are', 'aren',
@@ -32,3 +53,55 @@ CUSTOM_STOP_WORDS = ['a', 'about', 'above', 'across', 'after', 'afterwards', 'ag
                   'whole', 'whom', 'whose', 'why', 'will', 'with', 'within', 'without', 'won', "won't", 'would', 'wouldn',
                   "wouldn't", 'y', 'yet', 'you', "you'd", "you'll", "you're", "you've", 'your', 'yours', 'yourself',
                   'yourselves']
+
+
+
+def plot_cm(y_pred=None, y_true=None, path_saveplot=None, show_plot=True, plot_size=(8,6) ):
+    cf_matrix = confusion_matrix(y_true, y_pred)
+
+    ac = accuracy_score( y_true, y_pred )
+    all_vals = precision_recall_fscore_support(y_true, y_pred )
+    precision = all_vals[0][1]
+    recall = all_vals[1][1]
+    fscore = all_vals[2][1]
+    support = all_vals[3][1]
+
+    text_print_plot = \
+    """
+    Confusion Matrix
+    {} = {} 
+    {} = {}, {} = {}
+    {} = {}
+    {} = {}
+    """.format(
+        'Accuracy', round(ac,2), 
+        'Precision', round(precision,2), 
+        'Recall', round(recall, 2),
+        'Fscore', round(fscore, 2),
+        'Support', support
+    )
+    
+    group_names = ['True Neg','False Pos','False Neg','True Pos']
+    group_counts = ['{0:0.0f}'.format(value) for value in
+                    cf_matrix.flatten()]
+    group_percentages = ['{0:.1%}'.format(value) for value in
+                         cf_matrix.flatten()/np.sum(cf_matrix)]
+    labels = [f'{v1}\n\n{v2}\n\n{v3}' for v1, v2, v3 in
+              zip(group_names,group_counts,group_percentages)]
+    labels = np.asarray(labels).reshape(2,2)
+    
+    plt.figure( figsize=plot_size )
+    sns.heatmap(cf_matrix, annot=labels, fmt='', cmap='Blues')
+    
+    
+    plt.title(text_print_plot, fontweight='bold', fontsize=14)
+    plt.xlabel('pred', fontsize=14)
+    plt.ylabel('true', fontsize=14)
+    plt.tight_layout()
+    
+    path = os.path.join(path_saveplot, "model_cm_plot.png")
+    plt.savefig( path )
+    if( show_plot ):
+        plt.show()
+    
+    plt.close()
