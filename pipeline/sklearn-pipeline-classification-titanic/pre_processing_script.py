@@ -21,9 +21,11 @@ from sklearn.preprocessing import Binarizer, StandardScaler, OneHotEncoder
 
 
 col_to_predict = 'survived'
+col_primary_identifer = "user_id"
 
+COLLIST_META = [col_primary_identifer]
 COLLIST_FEATURE = ['age', 'fare', 'embarked', 'sex', 'pclass']
-COLLIST_ALL     = [col_to_predict] + COLLIST_FEATURE
+COLLIST_ALL     = [col_to_predict] + COLLIST_META + COLLIST_FEATURE
 COLLIST_NUMERIC = ['age', 'fare']
 COLLIST_CATEGORICAL = ['embarked', 'sex', 'pclass']
 # pclass is int BUT ordinal
@@ -37,6 +39,10 @@ COLLIST_FEATURE_DTYPE = {
     'embarked': "category",
     'sex': "category",
     'pclass': "int64"
+}
+
+COLLIST_META_DTYPE = {
+    "user_id": "object"
 }
 
 
@@ -76,13 +82,17 @@ if __name__ == '__main__':
                           'This usually indicates that the channel ({}) was incorrectly specified,\n' +
                           'the data specification in S3 was incorrectly specified or the role specified\n' +
                           'does not have permission to access the data.').format(args.train, "train"))
+    dtype_dict = merge_two_dicts(COLLIST_FEATURE_DTYPE, COLLIST_META_DTYPE)
     dtype_dict = merge_two_dicts(COLLIST_FEATURE_DTYPE, col_to_predict_dtype)
-    read_columns = COLLIST_FEATURE + [col_to_predict]
-    raw_data = [ pd.read_csv(file, usecols=read_columns, dtype=dtype_dict) for file in input_files ]
+    read_columns = COLLIST_ALL
+    raw_data = [ pd.read_csv(file, header=None, names=read_columns, dtype=dtype_dict) for file in input_files ]
     concat_data = pd.concat(raw_data)
+    concat_data = concat_data[COLLIST_ALL]
     
     print("data loading completed:")
     print("data shape : ", concat_data.shape)
+    print("columns : {}".format(COLLIST_ALL))
+    print("loaded RAW data : \n", concat_data.head(1).values, "\n")
     arr = concat_data[col_to_predict].value_counts()
     print("to_predict_col : {} : {}\n".format(arr.index.values, arr.values))
 
@@ -106,17 +116,18 @@ if __name__ == '__main__':
         verbose=True)
     
     # step_4 : fit the pre-processor
-    print("before pp : data shape : ", concat_data.shape)
+    print("before pp : FEATURE data shape : ", concat_data.shape)
+    print("columns ({} columns): {}".format(len(COLLIST_FEATURE), COLLIST_FEATURE))
     print("sample data : \n", concat_data[COLLIST_NUMERIC+COLLIST_CATEGORICAL].head(1).values, "\n")
     preprocessor.fit(concat_data)
     pp_data = preprocessor.transform(concat_data) # return numpy array
-    print("\nafter pp : data shape : ", pp_data.shape)
-    print("sample data : \n", pp_data[0])
     
     # below code to get colnames
     enc_cat_features = preprocessor.named_transformers_['cat']['onehot'].get_feature_names()
     col_names = np.concatenate([COLLIST_NUMERIC, enc_cat_features])
-    print("\ncolumn name of pp data:\nnum cols : {}\n{}\n".format(len(col_names), col_names))
+    print("\nafter pp : FEATURE data shape : ", pp_data.shape)
+    print("(IMP) column ({} columns): {}".format(len(col_names), col_names))
+    print("sample data : \n", pp_data[0])
     
     # step_5 : persist the model
     path = os.path.join(args.model_dir, "model.joblib")
@@ -143,9 +154,20 @@ def input_fn(input_data, content_type):
     print("{} input_fn {}".format("="*40, "="*40))
     if content_type == 'text/csv':
         # Read the raw input data as CSV.
-        df = pd.read_csv(StringIO(input_data))
-        print("df.shape : ", df.shape)
-        print("df.head(1):\n", df.head(1))
+        df = pd.read_csv(StringIO(input_data), header=None)
+        
+        if len(df.columns) == len(COLLIST_ALL):
+            print("training data i.e includes the col_to_predict")
+            print("df.shape : ", df.shape)
+            df.columns = COLLIST_ALL
+        elif len(df.columns) == len(COLLIST_FEATURE):
+            print("This pred/val data i.e unlabelled, not include col_to_predict")
+            print("df.shape : ", df.shape)
+            df.columns = COLLIST_FEATURE
+        else:
+            print("num cols : {}".format(len(df)))
+            raise ValueError("cols assignment not handled properly")
+            
         return df
     else:
         raise ValueError("{} not supported by script!".format(content_type))
@@ -175,26 +197,27 @@ def predict_fn(input_data, model):
     print("{} predict_fn {}".format("="*40, "="*40))
     
     # it anyhow filter out the label_column columns (as per the script)
-    print("before pp :  data shape : ".format(input_data.shape))
+    print("before pp :  data shape : {}".format(input_data.shape))
+    print("input data type : {}".format(type(input_data)))
+    #print("input data : {}".format(input_data))
     pp_data = model.transform(input_data[COLLIST_FEATURE]) # pp_data is numpy array
     
     if col_to_predict in input_data:
         # this section used for training (NOT pred/pipeline)
-        pp_data = np.insert(pp_data, 0, input_data[col_to_predict], axis=1)
+        pp_data = pd.DataFrame(pp_data)
+        pp_data.insert(0, col_to_predict, input_data[col_to_predict])
+        pp_data.insert(1, col_primary_identifer, input_data[col_primary_identifer])
+        pp_data = pp_data.values
         print("training job")
-        print("below data includes col_to_predict at 0th index")
+        print("below data includes : index_0: col_to_predict, index_1: col_primary_identifer")
         print("after pp : data shape : {}".format(pp_data.shape))
         print("sample data : \n", pp_data[0])
-        # if it is traning job
-        # Return the label (as the first column) and the set of features.
         return pp_data
     else:
         # this section used for pred/pipeline (Imp), here pass the input data without col_to_predict
-        print("test/pred job")
+        print("test/pred job\nonly contain the feature data")
         print("after pp : data shape : {}".format(pp_data.shape))
         print("sample data : \n", pp_data[0])
-        # if it is test/pred job
-        # Return only the set of features
         return pp_data
     
     

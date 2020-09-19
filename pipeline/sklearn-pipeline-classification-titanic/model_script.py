@@ -147,7 +147,8 @@ if __name__ =='__main__':
     parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAIN'))
     parser.add_argument('--test', type=str, default=os.environ.get('SM_CHANNEL_TEST'))
     parser.add_argument('--features', type=str)  # in this script we ask user to explicitly name features
-    parser.add_argument('--target', type=str, default="NA") # in this script we ask user to explicitly name the target
+    parser.add_argument('--target', type=str, default="0") # in this script we ask user to explicitly name the target
+    parser.add_argument('--col_index_to_drop', type=str, default="0, 1") # in this script we ask user to explicitly name the target
 
     args, _ = parser.parse_known_args()
     
@@ -176,22 +177,18 @@ if __name__ =='__main__':
     raw_data = [ pd.read_csv(file, header=None, engine="python") for file in input_files ]
     test_df = pd.concat(raw_data)
     
-    if args.target == "NA":
-        print('\nbuilding training and testing datasets')
-        print("!! below data print includes col_to_predict !!")
-        print("training data shape : ", train_df.shape)
-        print("train data head(1) : \n{}".format(train_df.head(1)))
-
-        col_to_predict = train_df.columns.values[0]
-        print("\n!! WARNING !!\n0th index column is assumed as : col_to_predict\n")
-        print("columns : ", train_df.columns.values)
-        print("col_to_predict : {}, arg_type : {}".format(col_to_predict, type(col_to_predict)))
-    else:
-        col_to_predict = args.target
-        print("\ncol_to_predict is provided by user as : {}".format(col_to_predict))
-              
-    X_train = train_df.drop(columns=[col_to_predict])
-    X_test = test_df.drop(columns=[col_to_predict])
+    col_to_predict = int(args.target)
+    col_index_to_drop = args.col_index_to_drop.split(", ")
+    colList_to_drop = [int(i) for i in col_index_to_drop]
+    print('\nbuilding training and testing datasets')
+    print("!! below data print includes col_to_predict/col_primary_identifer !!")
+    print("\n!! WARNING !!")
+    print("col_to_predict: {}\ncol_index_to_drop: {}".format(col_to_predict, colList_to_drop))
+    print("training data shape : ", train_df.shape)
+    print("train data head(1) : \n{}".format(train_df.head(1)))
+    
+    X_train = train_df.drop(columns=colList_to_drop)
+    X_test = test_df.drop(columns=colList_to_drop)
     y_train = train_df[col_to_predict]
     y_test = test_df[col_to_predict]
     
@@ -223,8 +220,8 @@ if __name__ =='__main__':
     
     
     # print auc_pr curve
-    plot_cm(y_pred=y_pred, y_true=y_true, path_saveplot=args.model_dir, show_plot=False, plot_size=(8,6) )
-    plot_pr_curve(y_true=y_true, y_score=y_score, path_saveplot=args.model_dir, show_plot=False, plot_size=(8,6))
+    plot_cm(y_pred=y_pred, y_true=y_true, path_saveplot=args.model_dir, show_plot=False, plot_size=(6,5) )
+    plot_pr_curve(y_true=y_true, y_score=y_score, path_saveplot=args.model_dir, show_plot=False, plot_size=(7,5.5))
     
         
     # persist model
